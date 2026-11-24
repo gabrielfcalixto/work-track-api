@@ -1,5 +1,7 @@
 package br.com.gfctech.project_manager.dto;
 
+import jakarta.validation.constraints.*;
+
 import br.com.gfctech.project_manager.entity.ProjectEntity;
 import br.com.gfctech.project_manager.enums.ProjectStatus;
 import lombok.*;
@@ -13,14 +15,22 @@ import java.util.stream.Collectors;
 @AllArgsConstructor
 public class ProjectDTO {
     private Long id;
+    @NotBlank(message = "Informe o nome do projeto.") @Size(max = 255)
     private String name;
+    @NotBlank(message = "Informe a descrição do projeto.") @Size(max = 255)
     private String description;
+    @NotNull @PositiveOrZero
     private Float hours;
+    @NotNull
     private ProjectStatus status;
+    @NotNull @Positive
     private Long managerId;
+    @NotNull @Positive
     private Long clientId;
-    private Set<Long> teamMemberIds;
+    private Set<@NotNull @Positive Long> teamMemberIds;
+    @NotNull(message = "Informe a data de início.")
     private LocalDate startDate;
+    @NotNull(message = "Informe a data limite.")
     private LocalDate deadline;
 
     public ProjectDTO(ProjectEntity projectEntity) {

@@ -1,119 +1,114 @@
 package br.com.gfctech.project_manager.service;
 
-import java.util.List;
-import java.util.Set;
-import java.util.stream.Collectors;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import br.com.gfctech.project_manager.dto.ProjectDTO;
-import br.com.gfctech.project_manager.entity.ClientEntity;
 import br.com.gfctech.project_manager.entity.ProjectEntity;
-import br.com.gfctech.project_manager.entity.TaskEntity;
-import br.com.gfctech.project_manager.entity.TimeEntryEntity;
-import br.com.gfctech.project_manager.entity.UserEntity;
+import br.com.gfctech.project_manager.entity.UserEntity.Role;
 import br.com.gfctech.project_manager.enums.ProjectStatus;
+import br.com.gfctech.project_manager.exceptions.ApiException;
 import br.com.gfctech.project_manager.repository.ClientRepository;
 import br.com.gfctech.project_manager.repository.ProjectRepository;
+import br.com.gfctech.project_manager.repository.TaskRepository;
 import br.com.gfctech.project_manager.repository.UserRepository;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Set;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
+@Transactional(readOnly = true)
 public class ProjectService {
+    private final ProjectRepository projects;
+    private final UserRepository users;
+    private final ClientRepository clients;
+    private final TaskRepository tasks;
 
-    @Autowired  
-    private ProjectRepository projectRepository;
+    public ProjectService(ProjectRepository projects, UserRepository users, ClientRepository clients,
+                          TaskRepository tasks) {
+        this.projects = projects;
+        this.users = users;
+        this.clients = clients;
+        this.tasks = tasks;
+    }
 
-    @Autowired  
-    private UserRepository userRepository;
-
-    @Autowired
-    private ClientRepository clientRepository;
-
-    @Transactional(readOnly = true)
     public List<ProjectDTO> getAllProjects() {
-        return projectRepository.findAll().stream().map(ProjectDTO::new).collect(Collectors.toList());
+        return projects.findAllByOrderByIdDesc().stream().map(ProjectDTO::new).toList();
     }
 
-    @Transactional
     public ProjectDTO getProjectById(Long id) {
-        return projectRepository.findById(id)
-        .map(ProjectDTO::new)
-        .orElseThrow(() -> new RuntimeException("Projeto não encontrado"));
+        return projects.findById(id).map(ProjectDTO::new)
+                .orElseThrow(() -> ApiException.notFound("Projeto não encontrado."));
     }
 
     @Transactional
-    public ProjectDTO addProject(ProjectDTO projectDTO) {
-        // Buscar o manager, client e teamMembers pelo ID
-        UserEntity manager = userRepository.findById(projectDTO.getManagerId())
-                .orElseThrow(() -> new RuntimeException("Manager not found with ID: " + projectDTO.getManagerId()));
-
-        ClientEntity client = clientRepository.findById(projectDTO.getClientId())
-                .orElseThrow(() -> new RuntimeException("Client not found with ID: " + projectDTO.getClientId()));
-
-        Set<UserEntity> teamMembers = userRepository.findAllById(projectDTO.getTeamMemberIds())
-                .stream()
-                .collect(Collectors.toSet());
-
-        ProjectEntity projectEntity = new ProjectEntity(projectDTO, manager, client, teamMembers);
-
-        projectRepository.save(projectEntity);
-
-        return new ProjectDTO(projectEntity);
+    public ProjectDTO addProject(ProjectDTO request) {
+        var project = new ProjectEntity();
+        apply(project, request);
+        return new ProjectDTO(projects.save(project));
     }
 
-
     @Transactional
-    public ProjectDTO updateProject(Long id, ProjectDTO projectDTO) {
-        ProjectEntity existingProject = projectRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Project not found with ID: " + id));
-
-        existingProject.setName(projectDTO.getName());
-        existingProject.setDescription(projectDTO.getDescription());
-        existingProject.setHours(projectDTO.getHours());
-        existingProject.setStatus(projectDTO.getStatus());
-        return new ProjectDTO(projectRepository.save(existingProject));
+    public ProjectDTO updateProject(Long id, ProjectDTO request) {
+        var project = lockProject(id);
+        apply(project, request);
+        return new ProjectDTO(project);
     }
 
     @Transactional
     public ProjectDTO updateStatus(Long id, String status) {
-        ProjectEntity project = projectRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Project not found with ID: " + id));
-
-        // Converte a String para Enum
-        ProjectStatus newStatus;
-        try {
-            newStatus = ProjectStatus.valueOf(status.toUpperCase()); // Converte para maiúsculas para evitar erros
-        } catch (IllegalArgumentException e) {
-            throw new RuntimeException("Invalid status value: " + status);
+        if (status == null || status.isBlank()) {
+            throw new IllegalArgumentException("Informe o status do projeto.");
         }
-
-        project.setStatus(newStatus); // Agora definimos corretamente o enum
-        return new ProjectDTO(projectRepository.save(project));
+        ProjectStatus parsed;
+        try {
+            parsed = ProjectStatus.valueOf(status.toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException error) {
+            throw new IllegalArgumentException("Status de projeto inválido.");
+        }
+        var project = lockProject(id);
+        project.setStatus(parsed);
+        return new ProjectDTO(project);
     }
 
     @Transactional
     public void deleteProject(Long id) {
-        ProjectEntity project = projectRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Project not found with ID: " + id));
-        projectRepository.delete(project);
-    }
-    
-    // Método para obter total de horas trabalhadas por um usuário
-    public Double getTotalHoursWorkedForUser(Long userId) {
-        UserEntity user = userRepository.findById(userId)
-            .orElseThrow(() -> new RuntimeException("Usuário não encontrado"));
-        return user.getTimeEntries().stream()
-            .mapToDouble(TimeEntryEntity::getTotalHours)
-            .sum();
-    }
-    
-    // Método para obter todas as tarefas de um projeto
-    public List<TaskEntity> getTasksForProject(Long projectId) {
-        ProjectEntity project = projectRepository.findById(projectId)
-            .orElseThrow(() -> new RuntimeException("Projeto não encontrado"));
-        return project.getTasks();
+        var project = lockProject(id);
+        if (tasks.existsByProjectId(id)) {
+            throw ApiException.conflict("Exclua as tarefas do projeto antes de excluir o projeto.");
+        }
+        projects.delete(project);
     }
 
-    
+    private void apply(ProjectEntity project, ProjectDTO request) {
+        if (request.getDeadline().isBefore(request.getStartDate())) {
+            throw new IllegalArgumentException("A data limite do projeto deve ser igual ou posterior ao início.");
+        }
+        var manager = users.findById(request.getManagerId())
+                .orElseThrow(() -> ApiException.notFound("Responsável não encontrado."));
+        boolean managerChanged = project.getManager() == null || !manager.getId().equals(project.getManager().getId());
+        if (managerChanged && manager.getRole() == Role.USER) {
+            throw new IllegalArgumentException("Selecione um gestor ou administrador como responsável.");
+        }
+        var client = clients.findById(request.getClientId())
+                .orElseThrow(() -> ApiException.notFound("Cliente não encontrado."));
+        var memberIds = request.getTeamMemberIds() == null ? Set.<Long>of() : request.getTeamMemberIds();
+        var members = users.findAllById(memberIds);
+        if (members.size() != memberIds.size()) {
+            throw ApiException.notFound("Um ou mais membros da equipe não foram encontrados.");
+        }
+        project.setName(request.getName().strip());
+        project.setDescription(request.getDescription().strip());
+        project.setHours(request.getHours());
+        project.setStatus(request.getStatus());
+        project.setManager(manager);
+        project.setClient(client);
+        project.setTeamMembers(new HashSet<>(members));
+        project.setStartDate(request.getStartDate());
+        project.setDeadline(request.getDeadline());
+    }
 
+    private ProjectEntity lockProject(Long id) {
+        return projects.lockById(id).orElseThrow(() -> ApiException.notFound("Projeto não encontrado."));
+    }
 }

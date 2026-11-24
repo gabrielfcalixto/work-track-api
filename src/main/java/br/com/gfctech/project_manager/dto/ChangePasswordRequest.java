@@ -1,22 +1,7 @@
 package br.com.gfctech.project_manager.dto;
 
-public class ChangePasswordRequest {
-    private String oldPassword;
-    private String newPassword;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 
-    public String getOldPassword() {
-        return oldPassword;
-    }
-
-    public void setOldPassword(String oldPassword) {
-        this.oldPassword = oldPassword;
-    }
-
-    public String getNewPassword() {
-        return newPassword;
-    }
-
-    public void setNewPassword(String newPassword) {
-        this.newPassword = newPassword;
-    }
-}
+public record ChangePasswordRequest(@NotBlank @Size(max = 72) String oldPassword,
+                                    @NotBlank @Size(min = 8, max = 72) String newPassword) {}

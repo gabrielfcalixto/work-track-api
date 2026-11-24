@@ -1,126 +1,60 @@
-# WorkTrack – Gerenciador de Projetos e Tarefas (Backend)
+# Work Track · API
 
-**WorkTrack** é um sistema de gerenciamento de projetos desenvolvido com **Java 21**, **Spring Boot**, e **MySQL**. Ele oferece funcionalidades para controle de projetos, tarefas, horas trabalhadas e gerenciamento de usuários, com autenticação e autorização via JWT.
+Aplicação para acompanhar clientes, projetos, tarefas e horas trabalhadas. A API usa Java 21, Spring Boot, Spring Security e Spring Data JPA. A interface Angular fica no repositório `work-track-angular`.
 
-## Tecnologias Utilizadas
-- Java 21
-- Spring Boot 3.4.2
-- MySQL (ou outro banco de dados relacional)
-- Spring Data JPA
-- Spring Security
-- JWT (Json Web Token)
-- Lombok
-- Springdoc OpenAPI
-- Maven
+## Demonstração local
 
-## Configuração do Ambiente
+Com o JDK 21 ativo, execute:
 
-### 1. Clone o Repositório:
-```bash
-git clone https://github.com/gabrielfcalixto/project-manager.git
+```powershell
+.\mvnw.cmd "-Dspring-boot.run.profiles=demo" spring-boot:run
 ```
 
-### 2. Configure o Banco de Dados:
-Certifique-se de ter o **MySQL** instalado e crie um banco de dados:
-```sql
-CREATE DATABASE projeto;
-```
-Caso queira usar outro banco de dados, altere a configuração em `application.properties` para os dados correspondentes.
+Em macOS ou Linux, use `sh ./mvnw -Dspring-boot.run.profiles=demo spring-boot:run`. O perfil demo usa um banco H2 em memória que é recriado ao iniciar a API. Ele disponibiliza a API em `127.0.0.1:8080` e inclui dados fictícios:
 
-### 3. Configure o `application.properties` ou `application.yml`:
-```properties
-# Configurações para o banco de dados MySQL
-spring.datasource.url=jdbc:mysql://localhost:3306/projeto?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
-spring.datasource.username=root
-spring.datasource.password=root
-spring.datasource.driver-class-name=com.mysql.cj.jdbc.Driver
-spring.jpa.database-platform=org.hibernate.dialect.MySQL8Dialect
+| Login | Perfil |
+| --- | --- |
+| `admin` | Administrador |
+| `gestor` | Gestor |
+| `dev` | Colaborador |
 
-# Configurações do Hibernate
-spring.jpa.hibernate.ddl-auto=create-drop
-spring.jpa.show-sql=true
-spring.jpa.defer-datasource-initialization=true
+A senha das três contas de demonstração é `WorktrackDemo!`. No frontend, execute `npm ci` e `npm start` e abra [localhost:4200](http://localhost:4200).
 
-# Desabilita a execução automática de data.sql
-spring.sql.init.mode=always
+## Banco MySQL
 
-# Configurações do JWT
-projeto.jwtSecret=${JWT_SECRET}
-projeto.jwtExpirationMs=9000000
+Crie um banco MySQL e inicie a API sem o perfil `demo`. A configuração é lida das variáveis de ambiente:
 
-# Configurações do servidor de e-mail (utilize uma senha de aplicativo)
-spring.mail.host=smtp.gmail.com
-spring.mail.port=587
-spring.mail.username=example@gmail.com
-spring.mail.password=tttt tttt tttt tttt  # (senha de aplicativo aqui)
-spring.mail.properties.mail.smtp.auth=true
-spring.mail.properties.mail.smtp.starttls.enable=true
-```
-Para garantir a segurança, use variáveis de ambiente para configurar `JWT_SECRET` e outras informações sensíveis.
+| Variável | Uso |
+| --- | --- |
+| `DB_URL` | URL JDBC. O padrão local é `jdbc:mysql://localhost:3306/projeto`. |
+| `DB_USERNAME` e `DB_PASSWORD` | Credenciais do banco. |
+| `DB_DDL_AUTO` | Estratégia de esquema do Hibernate. O padrão é `update`. |
+| `JWT_SECRET` | Chave HS512 com pelo menos 64 bytes aleatórios codificados em Base64. |
+| `JWT_EXPIRATION_MS` | Duração do token em milissegundos. O padrão é 9.000.000. |
+| `ADMIN_LOGIN`, `ADMIN_EMAIL` e `ADMIN_PASSWORD` | Configuram a criação da conta inicial se o login ainda não existir. `ADMIN_LOGIN` tem padrão `admin`. |
+| `FRONTEND_ORIGINS` | Origens permitidas para acesso direto à API, separadas por vírgula. |
+| `SMTP_ENABLED`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME` e `SMTP_PASSWORD` | Envio de senha inicial e recuperação por e-mail. Sem SMTP, o administrador define a senha inicial no cadastro. |
 
-### 4. Como Executar
+Para gerar a chave no PowerShell:
 
-1. **Compile o Projeto:**
-```bash
-mvn clean install
-```
-2. **Execute a Aplicação:**
-```bash
-mvn spring-boot:run
-```
-A aplicação estará disponível em: [http://localhost:8080](http://localhost:8080)
-
-**Frontend**: Clone também o repositório do frontend para a aplicação completa: [WorkTrack Angular](https://github.com/gabrielfcalixto/work-track-angular.git).
-
-## Documentação da API
-
-A documentação interativa (Swagger) está disponível em:
-[http://localhost:8080/swagger-ui/index.html#/](http://localhost:8080/swagger-ui/index.html#/)
-
-### Autenticação
-Utilize o endpoint `/auth/login` para obter o token JWT:
-```json
-POST /auth/login
-{
-  "username": "admin",
-  "password": "admin123"
-}
-```
-O token JWT deve ser usado no cabeçalho `Authorization` para acessar os demais endpoints:
-```http
-Authorization: Bearer <seu_token_jwt>
+```powershell
+$jwtBytes = New-Object byte[] 64
+$jwtRandom = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+try { $jwtRandom.GetBytes($jwtBytes) } finally { $jwtRandom.Dispose() }
+$env:JWT_SECRET = [Convert]::ToBase64String($jwtBytes)
 ```
 
-## Gerando Artefato
+As instalações existentes conservam os registros do MySQL e as contas já cadastradas. Se o banco recebeu usuários iniciais do código antigo, revise essas contas e troque suas senhas.
 
-Caso queira gerar o arquivo `.jar` do projeto:
-```bash
-mvn package
-```
-O arquivo gerado ficará em `target/project-manager-0.0.1-SNAPSHOT.jar` e pode ser executado com:
-```bash
-java -jar target/project-manager-0.0.1-SNAPSHOT.jar
+## API e testes
+
+- [Swagger UI](http://127.0.0.1:8080/swagger-ui/index.html) descreve os endpoints. Autentique em `POST /auth/login` com `login` e `password` e envie o token como `Authorization: Bearer <token>`.
+- `GET /dashboard`, `GET /task/me`, `GET /time-entries/me` e `GET /profile/me` retornam dados da sessão autenticada.
+- O painel inclui horas diárias de segunda a domingo. `PUT /dashboard/weekly-goal` salva a meta da conta em horas, com padrão de 40 h enquanto estiver sem configuração.
+- Os lançamentos validam duração e sobreposição. Edições e exclusões atualizam o total da tarefa. Contas com registros vinculados e projetos com tarefas recebem um erro de conflito ao serem excluídos.
+
+```powershell
+.\mvnw.cmd clean verify
 ```
 
-## Contribuindo
-
-1. Fork o repositório.
-2. Crie uma nova branch:
-```bash
-git checkout -b feature/nova-funcionalidade
-```
-3. Faça suas alterações e comite:
-```bash
-git commit -m "Adiciona nova funcionalidade X"
-```
-4. Envie para seu fork:
-```bash
-git push origin feature/nova-funcionalidade
-```
-5. Abra um Pull Request.
-
-## Licença
-Este projeto é licenciado sob a licença MIT. Veja o arquivo `LICENSE` para mais detalhes.
-
----
-Desenvolvido por Gabriel 🚀.
+O comando executa os testes de integração no H2 e gera `target/project-manager-0.0.1-SNAPSHOT.jar`.

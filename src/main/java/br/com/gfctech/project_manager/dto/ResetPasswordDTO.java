@@ -1,24 +1,9 @@
 package br.com.gfctech.project_manager.dto;
 
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
-
-
-@Getter
-@Setter
-@NoArgsConstructor
-@AllArgsConstructor
-public class ResetPasswordDTO {
-
-
-    private String email;
-
-    private String code;
-
-    private String newPassword;
-
-    
-}
+public record ResetPasswordDTO(@NotBlank @Email @Size(max = 255) String email,
+                               @NotBlank @Size(max = 64) String code,
+                               @NotBlank @Size(min = 8, max = 72) String newPassword) {}

@@ -1,31 +1,20 @@
 package br.com.gfctech.project_manager.dto;
 
 import br.com.gfctech.project_manager.entity.ClientEntity;
-import lombok.*;
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 
-@Getter
-@Setter
-@Data
-@NoArgsConstructor
-@AllArgsConstructor
-public class ClientDTO {
-    private Long id;
-    private String name;
-    private String cnpj;
-    private String razaoSocial;
-    private String cpf;  // Adicionar o campo cpf aqui
-    private String email;
-    private String phone;
-    private String address;
-
+public record ClientDTO(Long id,
+                        @NotBlank(message = "Informe o nome do cliente.") @Size(max = 255) String name,
+                        @Size(max = 30) String cnpj,
+                        @Size(max = 255) String razaoSocial,
+                        @NotBlank(message = "Informe o CPF do contato.") @Size(max = 20) String cpf,
+                        @NotBlank(message = "Informe o e-mail do cliente.") @Email @Size(max = 255) String email,
+                        @NotBlank(message = "Informe o telefone do cliente.") @Size(max = 30) String phone,
+                        @Size(max = 255) String address) {
     public ClientDTO(ClientEntity client) {
-        this.id = client.getId();
-        this.name = client.getName();
-        this.cnpj = client.getCnpj();
-        this.razaoSocial = client.getRazaoSocial();
-        this.cpf = client.getCpf(); 
-        this.email = client.getEmail();
-        this.phone = client.getPhone();
-        this.address = client.getAddress();
+        this(client.getId(), client.getName(), client.getCnpj(), client.getRazaoSocial(),
+                client.getCpf(), client.getEmail(), client.getPhone(), client.getAddress());
     }
 }

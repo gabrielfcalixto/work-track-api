@@ -7,13 +7,10 @@ import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalTime;
 
-import com.fasterxml.jackson.annotation.JsonFormat;
-
-import br.com.gfctech.project_manager.dto.TimeEntryDTO;
-
 @Entity
 @Table(name = "GFC_TIME_ENTRY")
-@Data
+@Getter
+@Setter
 @NoArgsConstructor
 @AllArgsConstructor
 public class TimeEntryEntity {
@@ -22,11 +19,11 @@ public class TimeEntryEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "task_id")
     private TaskEntity taskEntity;
 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id")
     private UserEntity user;
 

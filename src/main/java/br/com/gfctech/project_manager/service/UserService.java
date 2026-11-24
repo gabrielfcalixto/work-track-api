@@ -1,184 +1,210 @@
 package br.com.gfctech.project_manager.service;
 
-import java.time.LocalDateTime;
-import java.util.List;
-import java.util.stream.Collectors;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import br.com.gfctech.project_manager.dto.UserDTO;
 import br.com.gfctech.project_manager.entity.UserEntity;
 import br.com.gfctech.project_manager.entity.UserEntity.Role;
-import br.com.gfctech.project_manager.exceptions.UsuarioNaoEncontradoException;
+import br.com.gfctech.project_manager.exceptions.ApiException;
+import br.com.gfctech.project_manager.repository.ProjectRepository;
+import br.com.gfctech.project_manager.repository.TaskRepository;
+import br.com.gfctech.project_manager.repository.TimeEntryRepository;
 import br.com.gfctech.project_manager.repository.UserRepository;
-import org.apache.commons.lang3.RandomStringUtils;
-
+import java.nio.charset.StandardCharsets;
+import java.security.SecureRandom;
+import java.time.LocalDateTime;
+import java.util.Base64;
+import java.util.List;
+import java.util.Locale;
+import java.util.Objects;
+import org.springframework.data.domain.Sort;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
+@Transactional(readOnly = true)
 public class UserService {
-    @Autowired
-    private UserRepository userRepository;
+    private static final SecureRandom RANDOM = new SecureRandom();
 
-    @Autowired
-    private EmailService emailService;
+    private final UserRepository users;
+    private final ProjectRepository projects;
+    private final TaskRepository tasks;
+    private final TimeEntryRepository entries;
+    private final EmailService mail;
+    private final PasswordEncoder encoder;
 
-    @Autowired
-    private PasswordEncoder passwordEncoder;
-
-	public List<UserDTO> getAllUsers() {
-		List<UserEntity> users = userRepository.findAll(); // Obtém todos os usuários do repositório
-		return users.stream() // Cria um fluxo de usuários
-					.map(user -> new UserDTO(user)) // Mapeia cada usuário para um UserDTO
-					.collect(Collectors.toList()); // Coleta os DTOs em uma lista
-	}
-
-    public void addUser(UserDTO addUser) {
-
-        if(userRepository.findByEmail(addUser.getEmail()).isPresent()){
-            throw new IllegalArgumentException("O e-mail já está em uso.");
-        }
-
-        String senhaGerada = RandomStringUtils.randomAlphanumeric(8); // Gera uma senha aleatória
-        // Cria a entidade do usuário
-        UserEntity user = new UserEntity();
-        user.setName(addUser.getName());
-        user.setLogin(addUser.getLogin());
-        user.setEmail(addUser.getEmail());
-        user.setRole(Role.valueOf(addUser.getRole()));
-        user.setPassword(passwordEncoder.encode(senhaGerada));
-        userRepository.save(user);
-
-        // Envia a senha no email para o usuário
-        String assunto = "Login no HardProject";
-        String mensagem = "Olá Sr(a). " + user.getName() + ",\n\n"
-                + "Seu cadastro foi realizado com sucesso no HardProject. Segue abaixo sua senha para entrar no sistema:\n\n"
-                + "Senha: " + senhaGerada + "\n\n"
-                + "Recomendamos que você altere sua senha após o primeiro login.";
-
-        emailService.enviarEmailTexto(user.getEmail(), assunto, mensagem);
-    }
-    @Transactional
-    public UserDTO updateUser(Long id, UserDTO userDTO) {
-        UserEntity existingUser = userRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("User not found with ID: " + id));
-
-        existingUser.setName(userDTO.getName());
-        existingUser.setLogin(userDTO.getLogin());
-        existingUser.setEmail(userDTO.getEmail());
-        existingUser.setRole(Role.valueOf(userDTO.getRole())); 
-        existingUser.setPassword(userDTO.getPassword());
-        // Atualize outros campos conforme necessário
-        return new UserDTO(userRepository.save(existingUser));
+    public UserService(UserRepository users, ProjectRepository projects, TaskRepository tasks,
+                       TimeEntryRepository entries, EmailService mail, PasswordEncoder encoder) {
+        this.users = users;
+        this.projects = projects;
+        this.tasks = tasks;
+        this.entries = entries;
+        this.mail = mail;
+        this.encoder = encoder;
     }
 
-    @Transactional
-    public UserDTO updatePermissions(Long id, String role) {
-        UserEntity user = userRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("User not found with ID: " + id));
-        
-        try {
-            // Converte a String recebida para Enum (garante que está maiúscula)
-            user.setRole(UserEntity.Role.valueOf(role.toUpperCase()));
-        } catch (IllegalArgumentException e) {
-            throw new RuntimeException("Invalid role: " + role + ". Allowed values: ADMIN, MANAGER, USER");
-        }
-    
-        return new UserDTO(userRepository.save(user));
+    public List<UserDTO> getAllUsers() {
+        return users.findAll(Sort.by("name", "id")).stream().map(UserDTO::new).toList();
     }
-    
 
-    @Transactional
-    public void deleteUser(Long id) {
-        UserEntity user = userRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Usuário não encontrado: " + id));
-        userRepository.delete(user);
-    }
     public UserDTO getUserById(Long id) {
-        return userRepository.findById(id)
-            .map(UserDTO::new) // Usa o construtor corrigido
-            .orElseThrow(() -> new RuntimeException("Usuário não encontrado"));
+        return users.findById(id).map(UserDTO::new)
+                .orElseThrow(() -> ApiException.notFound("Usuário não encontrado."));
+    }
+
+    @Transactional
+    public void addUser(UserDTO request) {
+        var user = new UserEntity();
+        apply(user, request);
+        boolean emailPassword = request.getPassword() == null || request.getPassword().isBlank();
+        if (emailPassword && !mail.isEnabled()) {
+            throw new IllegalArgumentException("Informe uma senha inicial para o usuário.");
+        }
+        String password = emailPassword ? randomCode() : request.getPassword();
+        user.setPassword(encodePassword(password));
+        users.saveAndFlush(user);
+        if (emailPassword) {
+            mail.send(user.getEmail(), "Seu acesso ao Work Track",
+                    "Sua senha inicial é " + password + ". Altere a senha no seu perfil após entrar.");
+        }
+    }
+
+    @Transactional
+    public UserDTO updateUser(Long actorId, Long id, UserDTO request) {
+        var user = lockUser(id);
+        requireValidRoleChange(actorId, id, parseRole(request.getRole()));
+        apply(user, request);
+        return new UserDTO(user);
+    }
+
+    @Transactional
+    public UserDTO updatePermissions(Long actorId, Long id, String role) {
+        var user = lockUser(id);
+        var parsed = parseRole(role);
+        requireValidRoleChange(actorId, id, parsed);
+        user.setRole(parsed);
+        return new UserDTO(user);
+    }
+
+    @Transactional
+    public void deleteUser(Long actorId, Long id) {
+        if (Objects.equals(actorId, id)) {
+            throw ApiException.conflict("Sua conta não pode ser excluída pela própria sessão.");
+        }
+        var user = lockUser(id);
+        if (projects.existsByManagerIdOrTeamMembersId(id, id) || tasks.existsByAssignedUsersId(id)
+                || entries.existsByUserId(id)) {
+            throw ApiException.conflict("O usuário possui vínculos com projetos, tarefas ou lançamentos.");
+        }
+        users.delete(user);
     }
 
     @Transactional
     public void changePassword(Long userId, String oldPassword, String newPassword) {
-        // Recupera o usuário pelo ID
-        UserEntity user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("Usuário não encontrado com o ID: " + userId));
-        
-        // Verifica se a senha antiga fornecida está correta
-        if (!passwordEncoder.matches(oldPassword, user.getPassword())) {
-            throw new RuntimeException("A senha antiga fornecida está incorreta.");
+        var user = lockUser(userId);
+        if (!encoder.matches(oldPassword, user.getPassword())) {
+            throw new IllegalArgumentException("A senha atual está incorreta.");
         }
-
-        // Verifica se a nova senha é diferente da atual
         if (oldPassword.equals(newPassword)) {
-            throw new RuntimeException("A nova senha deve ser diferente da senha antiga.");
+            throw new IllegalArgumentException("A nova senha deve ser diferente da atual.");
         }
-
-        // Codifica a nova senha
-        user.setPassword(passwordEncoder.encode(newPassword));
-
-        // Salva o usuário com a nova senha
-        userRepository.save(user);
-
-        // Envia e-mail de confirmação (opcional)
-        String assunto = "Senha alterada com sucesso";
-        String mensagem = "Olá " + user.getName() + ",\n\n"
-                + "Sua senha foi alterada com sucesso.\n\n"
-                + "Se você não solicitou essa alteração, entre em contato conosco imediatamente.";
-
-        emailService.enviarEmailTexto(user.getEmail(), assunto, mensagem);
+        setPassword(user, newPassword);
     }
 
     @Transactional
     public void generatePasswordResetCode(String email) {
-        // Verifica se o usuário existe
-        UserEntity user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new UsuarioNaoEncontradoException("Usuário não encontrado com o e-mail: " + email));
-
-        //código numérico de 6 dígitos
-        String resetCode = RandomStringUtils.randomNumeric(6);
-
-        //expiração do código 15 minutos
-        LocalDateTime expirationDate = LocalDateTime.now().plusMinutes(15);
-
-        // Salva o código e a data de expiração no banco
-        user.setResetPasswordCode(resetCode);
-        user.setCodeExpirationDate(expirationDate);
-        userRepository.save(user);
-
-        String assunto = "Recuperação de Senha - HardProject";
-        String mensagem = "Olá " + user.getName() + ",\n\n"
-                + "Você solicitou a recuperação de senha. Aqui está o seu código de verificação:\n\n"
-                + "Código de recuperação: " + resetCode + "\n\n"
-                + "O código é válido por 15 minutos.";
-
-        emailService.enviarEmailTexto(user.getEmail(), assunto, mensagem);
+        if (!mail.isEnabled()) {
+            throw ApiException.unavailable("A recuperação por e-mail está desativada neste ambiente.");
+        }
+        users.lockByEmail(normalizeEmail(email)).ifPresent(user -> {
+            var now = LocalDateTime.now();
+            if (user.getCodeExpirationDate() != null && user.getCodeExpirationDate().isAfter(now.plusMinutes(14))) {
+                return;
+            }
+            String code = randomCode();
+            user.setResetPasswordCode(encoder.encode(code));
+            user.setCodeExpirationDate(now.plusMinutes(15));
+            mail.send(user.getEmail(), "Recuperação de senha do Work Track",
+                    "Seu código de recuperação é " + code + ". Ele é válido por 15 minutos.");
+        });
     }
 
     @Transactional
     public void resetPassword(String email, String code, String newPassword) {
-        // Verifica se o usuário existe
-        UserEntity user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new UsuarioNaoEncontradoException("Usuário não encontrado com o e-mail: " + email));
-
-        // Verifica se o código de reset existe e é válido
-        if (user.getResetPasswordCode() == null || !user.getResetPasswordCode().equals(code)) {
-            throw new IllegalArgumentException("Código inválido.");
+        var user = users.lockByEmail(normalizeEmail(email))
+                .orElseThrow(UserService::invalidResetCode);
+        String storedCode = user.getResetPasswordCode();
+        if (storedCode == null || user.getCodeExpirationDate() == null
+                || !user.getCodeExpirationDate().isAfter(LocalDateTime.now())
+                || !storedCode.startsWith("$2") || !encoder.matches(code, storedCode)) {
+            throw invalidResetCode();
         }
+        setPassword(user, newPassword);
+    }
 
-        // Verifica se a data de expiração existe e não expirou
-        if (user.getCodeExpirationDate() == null || user.getCodeExpirationDate().isBefore(LocalDateTime.now())) {
-            throw new IllegalArgumentException("Código expirado. Solicite novamente.");
+    private void apply(UserEntity user, UserDTO request) {
+        String login = request.getLogin().strip();
+        String email = normalizeEmail(request.getEmail());
+        if (users.findByLogin(login).filter(existing -> !existing.getId().equals(user.getId())).isPresent()) {
+            throw ApiException.conflict("O login já está em uso.");
         }
+        if (users.findByEmail(email).filter(existing -> !existing.getId().equals(user.getId())).isPresent()) {
+            throw ApiException.conflict("O e-mail já está em uso.");
+        }
+        if (!Objects.equals(user.getEmail(), email) || !Objects.equals(user.getLogin(), login)) {
+            clearResetCode(user);
+        }
+        user.setName(request.getName().strip());
+        user.setLogin(login);
+        user.setEmail(email);
+        user.setRole(parseRole(request.getRole()));
+    }
 
-        // Atualiza a senha
-        user.setPassword(passwordEncoder.encode(newPassword));
-        user.setResetPasswordCode(null); // Limpa o código após o uso
-        user.setCodeExpirationDate(null); // Limpa a data de expiração
-        userRepository.save(user);
+    private UserEntity lockUser(Long id) {
+        return users.lockById(id).orElseThrow(() -> ApiException.notFound("Usuário não encontrado."));
+    }
+
+    private static void requireValidRoleChange(Long actorId, Long id, Role role) {
+        if (Objects.equals(actorId, id) && role != Role.ADMIN) {
+            throw ApiException.conflict("Seu perfil de administrador não pode ser removido pela própria sessão.");
+        }
+    }
+
+    private static Role parseRole(String value) {
+        try {
+            return Role.valueOf(value == null ? "" : value.strip().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException error) {
+            throw new IllegalArgumentException("Perfil de acesso inválido.");
+        }
+    }
+
+    private void setPassword(UserEntity user, String password) {
+        user.setPassword(encodePassword(password));
+        clearResetCode(user);
+    }
+
+    private String encodePassword(String password) {
+        if (password.length() < 8 || password.getBytes(StandardCharsets.UTF_8).length > 72) {
+            throw new IllegalArgumentException("A senha deve ter ao menos 8 caracteres e no máximo 72 bytes.");
+        }
+        return encoder.encode(password);
+    }
+
+    private static void clearResetCode(UserEntity user) {
+        user.setResetPasswordCode(null);
+        user.setCodeExpirationDate(null);
+    }
+
+    private static String normalizeEmail(String email) {
+        return email.strip().toLowerCase(Locale.ROOT);
+    }
+
+    private static String randomCode() {
+        byte[] bytes = new byte[18];
+        RANDOM.nextBytes(bytes);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+    }
+
+    private static IllegalArgumentException invalidResetCode() {
+        return new IllegalArgumentException("Código de recuperação inválido ou expirado.");
     }
 }
-
-

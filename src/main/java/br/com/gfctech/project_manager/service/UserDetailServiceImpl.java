@@ -1,26 +1,21 @@
 package br.com.gfctech.project_manager.service;
 
-
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.security.core.userdetails.UserDetails;
+import br.com.gfctech.project_manager.repository.UserRepository;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 
-import br.com.gfctech.project_manager.entity.UserEntity;
-import br.com.gfctech.project_manager.repository.UserRepository;
-
 @Service
 public class UserDetailServiceImpl implements UserDetailsService {
+    private final UserRepository users;
 
-    @Autowired
-    private UserRepository userRepository;
+    public UserDetailServiceImpl(UserRepository users) {
+        this.users = users;
+    }
 
     @Override
-    public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
-        UserEntity user = userRepository.findByLogin(username)
-            .orElseThrow(() -> new UsernameNotFoundException("Usuário não encontrado: " + username));
-
-        return UserDetailsImpl.build(user);
+    public UserDetailsImpl loadUserByUsername(String login) {
+        return users.findByLogin(login).map(UserDetailsImpl::new)
+                .orElseThrow(() -> new UsernameNotFoundException("Usuário não encontrado."));
     }
 }

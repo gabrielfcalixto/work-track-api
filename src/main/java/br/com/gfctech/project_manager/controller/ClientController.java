@@ -1,43 +1,39 @@
 package br.com.gfctech.project_manager.controller;
 
 import br.com.gfctech.project_manager.dto.ClientDTO;
-import br.com.gfctech.project_manager.dto.UserDTO;
 import br.com.gfctech.project_manager.service.ClientService;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
-
+import jakarta.validation.Valid;
 import java.util.List;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/clients")
 public class ClientController {
+    private final ClientService clients;
 
-    @Autowired
-    private ClientService clientService;
+    public ClientController(ClientService clients) {
+        this.clients = clients;
+    }
 
-    // Buscar todos os clientes
     @GetMapping
-    public ResponseEntity<List<ClientDTO>> getAllClients() {
-        return ResponseEntity.ok(clientService.getAllClients());
+    public List<ClientDTO> list() {
+        return clients.getAllClients();
     }
 
-    // Buscar um cliente por ID
     @GetMapping("/{id}")
-    public ClientDTO getClientById(@PathVariable Long id) {
-        return clientService.getClientById(id);
+    public ClientDTO get(@PathVariable Long id) {
+        return clients.getClientById(id);
     }
 
-    // Criar um novo cliente
     @PostMapping
-    public ResponseEntity<ClientDTO> createClient(@RequestBody ClientDTO clientDTO) {
-        return ResponseEntity.ok(clientService.addClient(clientDTO));
+    @ResponseStatus(HttpStatus.CREATED)
+    public ClientDTO create(@Valid @RequestBody ClientDTO request) {
+        return clients.addClient(request);
     }
 
-    // Atualizar um cliente existente
     @PutMapping("/{id}")
-    public ResponseEntity<ClientDTO> updateClient(@PathVariable Long id, @RequestBody ClientDTO clientDTO) {
-        return ResponseEntity.ok(clientService.updateClient(id, clientDTO));
+    public ClientDTO update(@PathVariable Long id, @Valid @RequestBody ClientDTO request) {
+        return clients.updateClient(id, request);
     }
-
 }

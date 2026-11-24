@@ -1,79 +1,87 @@
 package br.com.gfctech.project_manager.controller;
 
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
 import br.com.gfctech.project_manager.dto.TaskDTO;
-import br.com.gfctech.project_manager.entity.TaskEntity;
 import br.com.gfctech.project_manager.enums.TaskStatus;
 import br.com.gfctech.project_manager.service.TaskService;
-import br.com.gfctech.project_manager.service.UserService;
-
+import br.com.gfctech.project_manager.service.UserDetailsImpl;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping(value = "/task")
-@CrossOrigin(origins = "http://localhost:4200") // Permite requisições do frontend
+@RequestMapping("/task")
 public class TaskController {
+    private final TaskService service;
 
-    @Autowired
-    private TaskService taskService;
-
-    
-        // Construtor para injeção de dependência
-    public TaskController(TaskService taskService) {
-            this.taskService = taskService;
-        }
+    public TaskController(TaskService service) {
+        this.service = service;
+    }
 
     @GetMapping
     public List<TaskDTO> getAllTasks() {
-        return taskService.getAllTasks();
+        return service.getAllTasks();
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("hasAnyAuthority('MANAGER', 'ADMIN') or @taskRepository.existsByIdAndAssignedUsersId(#id, principal.id)")
     public TaskDTO getTaskById(@PathVariable Long id) {
-        return taskService.getTaskById(id);
+        return service.getTaskById(id);
+    }
+
+    @GetMapping("/me")
+    public List<TaskDTO> getMyTasks(@AuthenticationPrincipal UserDetailsImpl user) {
+        return service.getTasksByUserId(user.getId());
     }
 
     @GetMapping("/usertask/{userId}")
-    public ResponseEntity<List<TaskDTO>> getTasksByUserId(@PathVariable Long userId) {
-        List<TaskDTO> tasks = taskService.getTasksByUserId(userId);
-        return ResponseEntity.ok(tasks);
+    @PreAuthorize("#userId == principal.id or hasAuthority('ADMIN')")
+    public List<TaskDTO> getTasksByUserId(@PathVariable Long userId) {
+        return service.getTasksByUserId(userId);
     }
-    @PostMapping("/add")
-    public TaskDTO addTask(@RequestBody TaskDTO taskDTO) {  
-        return taskService.addTask(taskDTO);
+
+    @PostMapping({"", "/add"})
+    @ResponseStatus(HttpStatus.CREATED)
+    public TaskDTO addTask(@Valid @RequestBody TaskDTO request) {
+        return service.addTask(request);
     }
 
     @PutMapping("/{id}")
-    public TaskDTO updateTask(@PathVariable Long id, @RequestBody TaskDTO taskDTO) {  
-        return taskService.updateTask(id, taskDTO);
+    public TaskDTO updateTask(@PathVariable Long id, @Valid @RequestBody TaskDTO request) {
+        return service.updateTask(id, request);
     }
 
-   @PatchMapping("/update-status/{id}")
-    public TaskDTO updateStatus(@PathVariable Long id, @RequestBody Map<String, String> update) {
-        TaskStatus newStatus;
-        try {
-            newStatus = TaskStatus.valueOf(update.get("status").toUpperCase()); // Converte para maiúsculas para garantir a correspondência correta
-        } catch (IllegalArgumentException e) {
-            throw new RuntimeException("Status inválido: " + update.get("status"));
+    @PatchMapping("/update-status/{id}")
+    public TaskDTO updateStatus(@PathVariable Long id, @RequestBody Map<String, String> request) {
+        String status = request.get("status");
+        if (status == null || status.isBlank()) {
+            throw new IllegalArgumentException("Informe o status da tarefa.");
         }
-        return taskService.updateTaskStatus(id, newStatus);
+        TaskStatus parsed;
+        try {
+            parsed = TaskStatus.valueOf(status.toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException error) {
+            throw new IllegalArgumentException("Status de tarefa inválido.");
+        }
+        return service.updateTaskStatus(id, parsed);
     }
 
     @DeleteMapping("/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
     public void deleteTask(@PathVariable Long id) {
-        taskService.deleteTask(id);
+        service.deleteTask(id);
     }
 
-    @PostMapping("/{taskId}/assign-user")
-    public ResponseEntity<?> assignUserToTask(@PathVariable Long taskId, @RequestBody Map<String, Long> payload) {
-        Long userId = payload.get("userId");
-        taskService.assignUserToTask(taskId, userId);
-        return ResponseEntity.ok().build();
+    @PostMapping("/{id}/assign-user")
+    public void assignUser(@PathVariable Long id, @Valid @RequestBody TaskAssignment request) {
+        service.assignUserToTask(id, request.userId());
     }
 
-
-    
+    public record TaskAssignment(@NotNull @Positive Long userId) {}
 }

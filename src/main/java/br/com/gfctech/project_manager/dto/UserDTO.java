@@ -1,42 +1,38 @@
 package br.com.gfctech.project_manager.dto;
 
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-
 import br.com.gfctech.project_manager.entity.UserEntity;
-import lombok.Data;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
+import java.time.LocalDate;
+import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.Setter;
 
-@Data
+@Getter
+@Setter
 @NoArgsConstructor
 public class UserDTO {
     private Long id;
+    @NotBlank(message = "Informe o nome do usuário.") @Size(max = 255)
     private String name;
+    @NotBlank(message = "Informe o login do usuário.") @Size(max = 255)
     private String login;
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     private String password;
+    @NotBlank(message = "Informe o e-mail do usuário.") @Email @Size(max = 255)
     private String email;
+    @NotBlank(message = "Informe o perfil de acesso.")
     private String role;
     private LocalDate joinDate;
-    
-    // Construtor completo
-    public UserDTO(Long id, String name, String login, String password, String email, String role, LocalDate joinDate) {
-        this.id = id;
-        this.name = name;
-        this.login = login;
-        this.password = password;
-        this.email = email;
-        this.role = role;
-        this.joinDate = joinDate;
-    }
 
-    // Construtor que recebe UserEntity
     public UserDTO(UserEntity user) {
-        this.id = user.getId();
-        this.name = user.getName();
-        this.login = user.getLogin();
-        this.password = user.getPassword();
-        this.email = user.getEmail();
-        this.role = user.getRole().name(); // Converte Enum para String
-        this.joinDate = user.getJoinDate();
+        id = user.getId();
+        name = user.getName();
+        login = user.getLogin();
+        email = user.getEmail();
+        role = user.getRole().name();
+        joinDate = user.getJoinDate();
     }
 }

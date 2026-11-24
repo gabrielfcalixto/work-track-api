@@ -1,22 +1,8 @@
 package br.com.gfctech.project_manager.dto;
 
-public class AuthenticationDTO {
+import com.fasterxml.jackson.annotation.JsonAlias;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 
-	private String login;
-	private String password;
-	public String getLogin() {
-		return login;
-	}
-	public void setUsername(String login) {
-		this.login = login;
-	}
-	public String getPassword() {
-		return password;
-	}
-	public void setPassword(String password) {
-		this.password = password;
-	}
-	
-	
-	
-}
+public record AuthenticationDTO(@JsonAlias("username") @NotBlank @Size(max = 255) String login,
+                                @NotBlank @Size(max = 72) String password) {}

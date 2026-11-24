@@ -12,7 +12,8 @@ import java.util.Set;
 
 @Entity
 @Table(name = "GFC_TASK")
-@Data
+@Getter
+@Setter
 @NoArgsConstructor
 @AllArgsConstructor
 public class TaskEntity {
@@ -40,7 +41,7 @@ public class TaskEntity {
 
     @Column(nullable = false)
     private Double totalHours = 0.0; 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "project_id", nullable = false)
     private ProjectEntity project;
 
@@ -52,7 +53,7 @@ public class TaskEntity {
     )
     private Set<UserEntity> assignedUsers = new HashSet<>();
 
-    @OneToMany(mappedBy = "taskEntity", cascade = CascadeType.ALL)
+    @OneToMany(mappedBy = "taskEntity")
     private Set<TimeEntryEntity> timeEntries = new HashSet<>();
 
     @Column(nullable = false)

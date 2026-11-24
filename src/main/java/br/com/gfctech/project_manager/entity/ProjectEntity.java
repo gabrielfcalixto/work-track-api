@@ -12,7 +12,8 @@ import lombok.*;
 
 @Entity
 @Table(name = "GFC_PROJECTS")
-@Data
+@Getter
+@Setter
 @NoArgsConstructor
 @AllArgsConstructor
 public class ProjectEntity {
@@ -34,11 +35,11 @@ public class ProjectEntity {
     @Column(nullable = false)
     private ProjectStatus status;
 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "manager_id", nullable = false)
     private UserEntity manager;
 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "client_id", nullable = false)
     private ClientEntity client;
 
@@ -56,7 +57,7 @@ public class ProjectEntity {
     @Column(nullable = false)
     private LocalDate deadline;
 
-    @OneToMany(mappedBy = "project", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    @OneToMany(mappedBy = "project")
     private List<TaskEntity> tasks = new ArrayList<>();
 
     public ProjectEntity(ProjectDTO projectDTO, UserEntity manager, ClientEntity client, Set<UserEntity> teamMembers) {

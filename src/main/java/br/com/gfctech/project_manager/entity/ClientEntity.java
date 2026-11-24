@@ -6,7 +6,8 @@ import java.util.List;
 
 @Entity
 @Table(name = "GFC_CLIENTS")
-@Data
+@Getter
+@Setter
 @NoArgsConstructor
 @AllArgsConstructor
 public class ClientEntity {
@@ -37,6 +38,6 @@ public class ClientEntity {
 
     
 
-    @OneToMany(mappedBy = "client", cascade = CascadeType.ALL)
+    @OneToMany(mappedBy = "client")
     private List<ProjectEntity> projects;
 }

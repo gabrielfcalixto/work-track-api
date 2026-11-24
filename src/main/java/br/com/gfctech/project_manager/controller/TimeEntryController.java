@@ -1,32 +1,51 @@
 package br.com.gfctech.project_manager.controller;
 
-import java.util.List;
-
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
-
 import br.com.gfctech.project_manager.dto.TimeEntryDTO;
+import br.com.gfctech.project_manager.dto.TimeEntryRequest;
 import br.com.gfctech.project_manager.service.TimeEntryService;
+import br.com.gfctech.project_manager.service.UserDetailsImpl;
+import jakarta.validation.Valid;
+import java.util.List;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/time-entries")
-@CrossOrigin(origins = "http://localhost:4200") // Permite requisições do frontend
 public class TimeEntryController {
+    private final TimeEntryService service;
 
-    @Autowired
-    private TimeEntryService timeEntryService;
-
-    @PostMapping("/add")
-    public TimeEntryDTO createTimeEntry(@RequestBody TimeEntryDTO timeEntryDTO) {
-        return timeEntryService.saveTimeEntry(timeEntryDTO);
+    public TimeEntryController(TimeEntryService service) {
+        this.service = service;
     }
 
-    
-    @GetMapping("/user/{userId}")
-    public ResponseEntity<List<TimeEntryDTO>> getUserTimeEntries(@PathVariable Long userId) {
-    List<TimeEntryDTO> entries = timeEntryService.getTimeEntriesByUserId(userId);
-    return ResponseEntity.ok(entries);
-}
+    @GetMapping("/me")
+    public List<TimeEntryDTO> listMine(@AuthenticationPrincipal UserDetailsImpl user) {
+        return service.getTimeEntriesByUserId(user.getId());
+    }
 
+    @GetMapping("/user/{userId}")
+    @PreAuthorize("#userId == principal.id or hasAuthority('ADMIN')")
+    public List<TimeEntryDTO> listByUser(@PathVariable Long userId) {
+        return service.getTimeEntriesByUserId(userId);
+    }
+
+    @PostMapping({"", "/add"})
+    @ResponseStatus(HttpStatus.CREATED)
+    public TimeEntryDTO create(@AuthenticationPrincipal UserDetailsImpl user, @Valid @RequestBody TimeEntryRequest request) {
+        return service.create(user.getId(), request);
+    }
+
+    @PutMapping("/{id}")
+    public TimeEntryDTO update(@AuthenticationPrincipal UserDetailsImpl user, @PathVariable Long id,
+                               @Valid @RequestBody TimeEntryRequest request) {
+        return service.update(user.getId(), id, request);
+    }
+
+    @DeleteMapping("/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void delete(@AuthenticationPrincipal UserDetailsImpl user, @PathVariable Long id) {
+        service.delete(user.getId(), id);
+    }
 }

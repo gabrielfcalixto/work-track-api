@@ -1,50 +1,51 @@
 package br.com.gfctech.project_manager.controller;
 
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.web.bind.annotation.*;
-
-import br.com.gfctech.project_manager.dto.ClientDTO;
 import br.com.gfctech.project_manager.dto.ProjectDTO;
 import br.com.gfctech.project_manager.service.ProjectService;
+import jakarta.validation.Valid;
 import java.util.List;
 import java.util.Map;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping(value = "/project")
-@CrossOrigin(origins = "http://localhost:4200") // Permite requisições do frontend
+@RequestMapping("/project")
 public class ProjectController {
+    private final ProjectService service;
 
-    @Autowired
-    private ProjectService projectService;
+    public ProjectController(ProjectService service) {
+        this.service = service;
+    }
 
     @GetMapping
     public List<ProjectDTO> getAllProjects() {
-        return projectService.getAllProjects();
+        return service.getAllProjects();
     }
 
     @GetMapping("/{id}")
     public ProjectDTO getProjectById(@PathVariable Long id) {
-        return projectService.getProjectById(id);
+        return service.getProjectById(id);
     }
 
-    @PostMapping("/add")
-    public ProjectDTO addProject(@RequestBody ProjectDTO projectDTO) {  
-        return projectService.addProject(projectDTO);
+    @PostMapping({"", "/add"})
+    @ResponseStatus(HttpStatus.CREATED)
+    public ProjectDTO addProject(@Valid @RequestBody ProjectDTO request) {
+        return service.addProject(request);
     }
 
     @PutMapping("/{id}")
-    public ProjectDTO updateProject(@PathVariable Long id, @RequestBody ProjectDTO projectDTO) {  
-        return projectService.updateProject(id, projectDTO);
-    }
-    @PatchMapping("/update-status/{id}")
-    public ProjectDTO updateStatus(@PathVariable Long id, @RequestBody Map<String, String> update) {
-        return projectService.updateStatus(id, update.get("status"));
+    public ProjectDTO updateProject(@PathVariable Long id, @Valid @RequestBody ProjectDTO request) {
+        return service.updateProject(id, request);
     }
 
+    @PatchMapping("/update-status/{id}")
+    public ProjectDTO updateStatus(@PathVariable Long id, @RequestBody Map<String, String> request) {
+        return service.updateStatus(id, request.get("status"));
+    }
 
     @DeleteMapping("/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
     public void deleteProject(@PathVariable Long id) {
-        projectService.deleteProject(id);
+        service.deleteProject(id);
     }
 }

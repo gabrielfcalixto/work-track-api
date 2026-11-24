@@ -2,21 +2,28 @@ package br.com.gfctech.project_manager.controller;
 
 import br.com.gfctech.project_manager.dto.ProfileDTO;
 import br.com.gfctech.project_manager.service.ProfileService;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.ResponseEntity;
+import br.com.gfctech.project_manager.service.UserDetailsImpl;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/profile")
-@CrossOrigin("http://localhost:4200")
 public class ProfileController {
+    private final ProfileService profiles;
 
-    @Autowired
-    private ProfileService profileService;
+    public ProfileController(ProfileService profiles) {
+        this.profiles = profiles;
+    }
+
+    @GetMapping("/me")
+    public ProfileDTO getMyProfile(@AuthenticationPrincipal UserDetailsImpl user) {
+        return profiles.getProfile(user.getId());
+    }
 
     @GetMapping("/{userId}")
-    public ResponseEntity<ProfileDTO> getProfile(@PathVariable Long userId) {
-        ProfileDTO profile = profileService.getProfile(userId);
-        return ResponseEntity.ok(profile);
+    @PreAuthorize("#userId == principal.id or hasAuthority('ADMIN')")
+    public ProfileDTO getProfile(@PathVariable Long userId) {
+        return profiles.getProfile(userId);
     }
 }

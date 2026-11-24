@@ -1,71 +1,64 @@
 package br.com.gfctech.project_manager.controller;
 
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
-
 import br.com.gfctech.project_manager.dto.ChangePasswordRequest;
 import br.com.gfctech.project_manager.dto.UserDTO;
+import br.com.gfctech.project_manager.service.UserDetailsImpl;
 import br.com.gfctech.project_manager.service.UserService;
-import java.util.HashMap;
+import jakarta.validation.Valid;
 import java.util.List;
 import java.util.Map;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping(value = "/user")
-@CrossOrigin(origins = "http://localhost:4200") // Permite requisições do frontend
+@RequestMapping("/user")
 public class UserController {
+    private final UserService users;
 
-    private UserService userService;    
-
-        // Construtor para injeção de dependência
-        public UserController(UserService userService) {
-            this.userService = userService;
-        }
+    public UserController(UserService users) {
+        this.users = users;
+    }
 
     @GetMapping
     public List<UserDTO> getAllUsers() {
-        return userService.getAllUsers();
-    }
-
-    @PostMapping("/add")
-    public void addUser(@RequestBody UserDTO addUser) {
-        userService.addUser(addUser);
+        return users.getAllUsers();
     }
 
     @GetMapping("/{id}")
     public UserDTO getUserById(@PathVariable Long id) {
-        return userService.getUserById(id);
+        return users.getUserById(id);
+    }
+
+    @PostMapping("/add")
+    @ResponseStatus(HttpStatus.CREATED)
+    public void addUser(@Valid @RequestBody UserDTO request) {
+        users.addUser(request);
     }
 
     @PutMapping("/{id}")
-    public UserDTO updateUser(@PathVariable Long id, @RequestBody UserDTO userDTO) {
-        return userService.updateUser(id, userDTO);
+    public UserDTO updateUser(@AuthenticationPrincipal UserDetailsImpl actor, @PathVariable Long id,
+                              @Valid @RequestBody UserDTO request) {
+        return users.updateUser(actor.getId(), id, request);
     }
 
     @PatchMapping("/permissions/{id}")
-    public UserDTO updatePermissions(@PathVariable Long id, @RequestBody Map<String, String> update) {
-        return userService.updatePermissions(id, update.get("role"));
+    public UserDTO updatePermissions(@AuthenticationPrincipal UserDetailsImpl actor, @PathVariable Long id,
+                                     @RequestBody Map<String, String> request) {
+        return users.updatePermissions(actor.getId(), id, request.get("role"));
     }
 
     @DeleteMapping("/{id}")
-    public void deleteUser(@PathVariable Long id) {
-        userService.deleteUser(id);
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteUser(@AuthenticationPrincipal UserDetailsImpl actor, @PathVariable Long id) {
+        users.deleteUser(actor.getId(), id);
     }
 
     @PutMapping("/{id}/change-password")
-    public ResponseEntity<Map<String, String>> changePassword(@PathVariable Long id,
-                                                               @RequestBody ChangePasswordRequest changePasswordRequest) {
-        Map<String, String> response = new HashMap<>();
-        try {
-            userService.changePassword(id, changePasswordRequest.getOldPassword(), changePasswordRequest.getNewPassword());
-            response.put("message", "Senha alterada com sucesso!");
-            return ResponseEntity.ok(response);
-        } catch (RuntimeException e) {
-            response.put("error", e.getMessage());
-            return ResponseEntity.badRequest().body(response);
-        }
+    @PreAuthorize("#id == principal.id")
+    public Map<String, String> changePassword(@PathVariable Long id, @Valid @RequestBody ChangePasswordRequest request) {
+        users.changePassword(id, request.oldPassword(), request.newPassword());
+        return Map.of("message", "Senha alterada com sucesso.");
     }
-
 }
-
-

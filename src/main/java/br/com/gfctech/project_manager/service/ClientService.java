@@ -1,69 +1,60 @@
 package br.com.gfctech.project_manager.service;
 
 import br.com.gfctech.project_manager.dto.ClientDTO;
-import br.com.gfctech.project_manager.dto.UserDTO;
 import br.com.gfctech.project_manager.entity.ClientEntity;
+import br.com.gfctech.project_manager.exceptions.ApiException;
 import br.com.gfctech.project_manager.repository.ClientRepository;
-import org.springframework.beans.factory.annotation.Autowired;
+import java.util.List;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
-import java.util.stream.Collectors;
-
 @Service
+@Transactional(readOnly = true)
 public class ClientService {
+    private final ClientRepository clients;
 
-    @Autowired
-    private ClientRepository clientRepository;
+    public ClientService(ClientRepository clients) {
+        this.clients = clients;
+    }
 
-    @Transactional(readOnly = true)
     public List<ClientDTO> getAllClients() {
-        return clientRepository.findAll().stream()
-                .map(ClientDTO::new)
-                .collect(Collectors.toList());
+        return clients.findAll(Sort.by("name", "id")).stream().map(ClientDTO::new).toList();
     }
 
     public ClientDTO getClientById(Long id) {
-        return clientRepository.findById(id)
-            .map(ClientDTO::new)
-            .orElseThrow(() -> new RuntimeException("Cliente não encontrado"));
+        return new ClientDTO(findClient(id));
     }
 
     @Transactional
-    public ClientDTO addClient(ClientDTO clientDTO) {
-        ClientEntity clientEntity = new ClientEntity();
-        clientEntity.setName(clientDTO.getName());
-        clientEntity.setCnpj(clientDTO.getCnpj());
-        clientEntity.setRazaoSocial(clientDTO.getRazaoSocial());
-        clientEntity.setCpf(clientDTO.getCpf());
-        clientEntity.setEmail(clientDTO.getEmail());
-        clientEntity.setPhone(clientDTO.getPhone());
-        clientEntity.setAddress(clientDTO.getAddress());
-
-        clientRepository.save(clientEntity);
-        return new ClientDTO(clientEntity);
+    public ClientDTO addClient(ClientDTO request) {
+        var client = new ClientEntity();
+        apply(client, request);
+        return new ClientDTO(clients.save(client));
     }
 
     @Transactional
-    public ClientDTO updateClient(Long id, ClientDTO clientDTO) {
-        ClientEntity existingClient = clientRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Client not found with ID: " + id));
-                existingClient.setName(clientDTO.getName());
-                existingClient.setCnpj(clientDTO.getCnpj());
-                existingClient.setRazaoSocial(clientDTO.getRazaoSocial());
-                existingClient.setCpf(clientDTO.getCpf());
-                existingClient.setEmail(clientDTO.getEmail());
-                existingClient.setPhone(clientDTO.getPhone());
-                existingClient.setAddress(clientDTO.getAddress());
-
-        return new ClientDTO(clientRepository.save(existingClient));
+    public ClientDTO updateClient(Long id, ClientDTO request) {
+        var client = findClient(id);
+        apply(client, request);
+        return new ClientDTO(client);
     }
 
-    @Transactional
-    public void deleteClient(Long id) {
-        ClientEntity client = clientRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Client not found with ID: " + id));
-        clientRepository.delete(client);
+    private ClientEntity findClient(Long id) {
+        return clients.findById(id).orElseThrow(() -> ApiException.notFound("Cliente não encontrado."));
+    }
+
+    private static void apply(ClientEntity client, ClientDTO request) {
+        client.setName(request.name().strip());
+        client.setCnpj(optionalText(request.cnpj()));
+        client.setRazaoSocial(optionalText(request.razaoSocial()));
+        client.setCpf(request.cpf().strip());
+        client.setEmail(request.email().strip());
+        client.setPhone(request.phone().strip());
+        client.setAddress(optionalText(request.address()));
+    }
+
+    private static String optionalText(String value) {
+        return value == null || value.isBlank() ? null : value.strip();
     }
 }
